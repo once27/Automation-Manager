@@ -31,6 +31,7 @@ test("the dashboard root route responds with the foundation page", { timeout: 60
   );
 
   let response;
+  let responseBody;
   try {
     const deadline = Date.now() + 50_000;
     while (Date.now() < deadline) {
@@ -46,6 +47,9 @@ test("the dashboard root route responds with the foundation page", { timeout: 60
         await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
       }
     }
+    if (response) {
+      responseBody = await response.text();
+    }
   } finally {
     if (server.exitCode === null) {
       server.kill();
@@ -55,5 +59,5 @@ test("the dashboard root route responds with the foundation page", { timeout: 60
 
   assert(response, "Next.js server did not become ready in time");
   assert.equal(response.status, 200);
-  assert.match(await response.text(), /Dashboard foundation is ready\./);
+  assert.match(responseBody, /Dashboard foundation is ready\./);
 });
