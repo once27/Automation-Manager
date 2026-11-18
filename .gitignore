@@ -1,0 +1,27 @@
+# Documentation and task records are maintained locally.
+*.md
+/docs/
+/work-log/
+
+# Local secrets and environment overrides.
+.env
+.env.*
+!.env.example
+
+# Python virtual environments, bytecode, and tool caches.
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.pyright/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Node dependencies, framework output, and coverage artifacts.
+node_modules/
+.next/
+.pnpm-store/
+coverage/
+

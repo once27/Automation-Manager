@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python quality and browser runtime
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          version: "0.13.7"
+          enable-cache: true
+
+      - uses: pnpm/action-setup@v6.1.1
+        with:
+          version: "10.29.3"
+
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install locked Python dependencies
+        run: uv sync --locked --all-packages
+
+      - name: Lint Python
+        run: pnpm run lint:python
+
+      - name: Type-check Python
+        run: pnpm run typecheck:python
+
+      - name: Test Python
+        run: pnpm run test:python
+
+      - name: Install pinned Chromium
+        run: uv run --package browserfleet-worker playwright install --with-deps chromium
+
+      - name: Smoke-test Chromium launch
+        run: >-
+          uv run --package browserfleet-worker python -c
+          "from playwright.sync_api import sync_playwright; p = sync_playwright().start(); browser = p.chromium.launch(); browser.close(); p.stop()"
+
+  dashboard:
+    name: Dashboard quality and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: pnpm/action-setup@v6.1.1
+        with:
+          version: "10.29.3"
+
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install locked JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint dashboard
+        run: pnpm run lint:web
+
+      - name: Type-check dashboard
+        run: pnpm run typecheck:web
+
+      - name: Test dashboard route
+        run: pnpm run test:web
+
+      - name: Build dashboard
+        run: pnpm run build:web

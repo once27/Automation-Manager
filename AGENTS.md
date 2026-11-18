@@ -2,30 +2,37 @@
 
 ## Agent Workflow & Work Records
 
-Use the matching specialist defined in `C:\Users\soham\.codex\agents\` for each task. Available specialists cover architecture, backend, database, frontend, worker runtime, DevOps, documentation, QA, security, bug fixing, and code review. Match the work to the specialist description; involve multiple specialists only when the scope crosses specialties or calls for independent review. Keep work sequential and focused on one task at a time.
+Use the matching specialist from `C:\Users\soham\.codex\agents\` for each task. Available roles cover architecture, backend, database, frontend, worker runtime, DevOps, documentation, QA, security, bug fixing, and code review. Work on one focused task at a time. Before implementation, record its plan, scope, steps, and unresolved questions in one Markdown file under `work-log/`; update it with meaningful actions, files changed, checks and results, and unresolved items. Verify facts in the repository and ask when a material requirement cannot be established.
 
-Before implementation, document a plan with scope, steps, and unresolved questions. Execute against that plan. Verify requirements and behavior from repository sources; do not invent missing facts. Stop to ask for clarification when an unresolved material decision cannot be established from available context. Record work in `work-log/`, using one Markdown file per task (`YYYY-MM-DD-short-task-name.md`). In that task file, document the plan and every meaningful action, including inspections, edits, commands or checks and their outcomes, and unresolved items. Update the record as work proceeds.
+## Root-Cause-First Troubleshooting
 
-## Project Structure & Module Organization
+Every specialist must establish the root cause before changing code or configuration. Reproduce the reported failure when possible, then trace it through the relevant source of truth: runtime/interpreter selection, workspace membership and commands, dependency declarations and lockfiles, import paths, configuration, or the failing application path. Separate observed symptoms from hypotheses and record the evidence that confirms the cause.
 
-This checkout currently contains BrowserFleet planning documents, not application code. `BROWSERFLEET_ARCHITECTURE.md` describes intended system boundaries and technology choices; `BROWSERFLEET_PHASES.md` tracks delivery phases and acceptance criteria. `work-log/` contains task-by-task action records. No source, tests, or assets directories are present yet. As implementation begins, keep API/control-plane, worker runtime, dashboard, SDK, deployment, and tests in clearly named top-level areas, following the architecture document's ownership boundaries.
+Do not apply speculative fixes, suppress the symptom, or stack workarounds on top of earlier patches. Fix the responsible source or configuration at its root. Before editing, check related workflows and consumers that could be affected; add or update a regression test/check where appropriate. After editing, rerun the original failing command and relevant neighboring checks. A fix is complete only when the cause is addressed and these checks pass, or when a remaining external blocker is clearly documented.
 
-## Build, Test, and Development Commands
+If evidence does not confirm a root cause, stop before making a fix. Report what was reproduced, what was inspected, the leading hypotheses, and what evidence or access is still needed. Do not label a hypothesis as the cause or present a workaround as a root-level repair.
 
-There are no project manifests or runnable build/test commands in this checkout. Do not assume a command is available until its `pyproject.toml`, `package.json`, `Makefile`, or other defining file is added. When code lands, document reproducible setup, local service startup, and test commands in the relevant README and keep them aligned with CI.
+Recent example: `backend-engineer` was invoked for the API dependency issue and again for the API test import issue; `devops-engineer` was also invoked for workspace dependency diagnosis. This repeated troubleshooting did not identify all causes on the first pass. All agents must follow the root-cause and regression-check requirements above, regardless of specialty.
 
-## Coding Style & Naming Conventions
+## Project Structure
 
-Follow the planned stack: Python 3.12+, FastAPI, SQLAlchemy 2.x, Pydantic v2, Playwright, and a Next.js/TypeScript dashboard. Keep platform-specific worker behavior behind environment adapters. Use descriptive module names that match domain responsibilities (for example, `scheduler` or `artifact_service`). Add formatter and linter configuration with the first implementation rather than relying on undocumented personal settings.
+- `apps/api/` contains the FastAPI application and pytest smoke test.
+- `apps/dashboard/` contains the Next.js/TypeScript skeleton and Node route smoke test.
+- `workers/agent/` is the worker package boundary; Playwright is pinned there, but worker behavior is not implemented.
+- `docs/architecture/` contains the architecture and phase plans; `work-log/` contains task records.
 
-## Testing Guidelines
+Markdown documentation, `docs/`, and `work-log/` are intentionally Git-ignored at the owner's request and remain local to this checkout. The application and package manifests are at the repository root and under `apps/` and `workers/`.
 
-No test framework or tests are present yet. The architecture calls for pytest, Playwright, and Locust for unit, browser/integration, and load testing. Add tests alongside each implementation phase, name Python tests `test_*.py`, and cover acceptance criteria and failure paths. Do not claim coverage thresholds until the repository defines and enforces them.
+## Development Commands
 
-## Commit & Pull Request Guidelines
+Use Python 3.12 with uv and Node 22 with pnpm 10.29.3. Run `uv sync` and `pnpm install` from the root to install dependencies. Start the API with `uv run --project apps/api uvicorn browserfleet_api.main:app --app-dir apps/api --reload --host 127.0.0.1 --port 8000`; start the dashboard with `pnpm --filter @browserfleet/dashboard dev`.
 
-Git history is unavailable in this checkout, so no established commit convention can be verified. Use short imperative commit subjects (for example, `Add worker heartbeat handling`). Pull requests should explain the change, link the relevant phase or issue and work-log record, list validation commands and results, and include screenshots for dashboard changes. Call out configuration or migration impacts.
+Run `pnpm run lint`, `pnpm run typecheck`, `pnpm run test`, and `pnpm run build` from the root. `pnpm run browsers:install` installs the worker's pinned Chromium browser. PostgreSQL, RabbitMQ, Redis, MinIO, and related local services belong to the later infrastructure phase and are not required by the current skeleton.
 
-## Security & Configuration
+## Coding Style & Testing
 
-Treat workflows, credentials, browser profiles, and artifacts as sensitive. Never commit secrets or execute arbitrary job-supplied Python on shared workers. Use synthetic data in examples and demos, and document required environment variables without including live values.
+Python targets 3.12, uses Ruff with import sorting, and is checked by strict Pyright. Python tests live under each package's `tests/` directory and use `test_*.py`; the API health check uses pytest. The dashboard uses TypeScript, ESLint, and Node's built-in test runner. Add tests for new behavior and failure paths; no coverage threshold is configured.
+
+## Commits, Pull Requests & Security
+
+The available Git history currently contains only `test-commit`, which does not establish a commit convention. The repository owner manages commits, pushes, and pull requests. Pull requests should explain the change, identify its phase or task, report checks, and call out configuration impacts. Never commit credentials; `.env` and local build/cache artifacts are ignored. Keep `.env.example` free of secrets. Treat workflows, browser profiles, and artifacts as sensitive, and never execute arbitrary job-supplied Python on shared workers.

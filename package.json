@@ -1,0 +1,23 @@
+{
+  "name": "browserfleet",
+  "private": true,
+  "packageManager": "pnpm@10.29.3",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "lint": "pnpm run lint:python && pnpm run lint:web",
+    "lint:python": "uv run --all-packages ruff check .",
+    "lint:web": "pnpm --filter @browserfleet/dashboard lint",
+    "format:python": "uv run --all-packages ruff format .",
+    "typecheck": "pnpm run typecheck:python && pnpm run typecheck:web",
+    "typecheck:python": "uv run --all-packages pyright",
+    "typecheck:web": "pnpm --filter @browserfleet/dashboard typecheck",
+    "test": "pnpm run test:python && pnpm run test:web",
+    "test:python": "uv run --all-packages pytest",
+    "test:web": "pnpm --filter @browserfleet/dashboard test",
+    "build": "pnpm run build:web",
+    "build:web": "pnpm --filter @browserfleet/dashboard build",
+    "browsers:install": "uv run --package browserfleet-worker playwright install chromium"
+  }
+}

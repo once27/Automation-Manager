@@ -1,0 +1,13 @@
+[project]
+name = "browserfleet-api"
+version = "0.1.0"
+description = "BrowserFleet FastAPI control plane."
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.136.1",
+    "httpx2==2.16.2",
+    "uvicorn==0.46.0",
+]
+
+[tool.uv]
+package = false
