@@ -4,6 +4,8 @@
 
 Use the matching specialist from `C:\Users\soham\.codex\agents\` for each task. Available roles cover architecture, backend, database, frontend, worker runtime, DevOps, documentation, QA, security, bug fixing, and code review. Work on one focused task at a time. Before implementation, record its plan, scope, steps, and unresolved questions in one Markdown file under `work-log/`; update it with meaningful actions, files changed, checks and results, and unresolved items. Verify facts in the repository and ask when a material requirement cannot be established.
 
+When completing a phase or a documented feature, update this file in the same change with its completion state, the relevant verification results, and any follow-up work. Keep the state precise: planned, implemented, tested, and released are different milestones. Because `work-log/` and other Markdown documentation are intentionally ignored, treat work-log notes as local records; put any status or handoff needed by other contributors in this tracked file (or explicitly force-add the relevant document when the owner intends to version it).
+
 ## Root-Cause-First Troubleshooting
 
 Every specialist must establish the root cause before changing code or configuration. Reproduce the reported failure when possible, then trace it through the relevant source of truth: runtime/interpreter selection, workspace membership and commands, dependency declarations and lockfiles, import paths, configuration, or the failing application path. Separate observed symptoms from hypotheses and record the evidence that confirms the cause.
@@ -36,3 +38,23 @@ Python targets 3.12, uses Ruff with import sorting, and is checked by strict Pyr
 ## Commits, Pull Requests & Security
 
 The available Git history currently contains only `test-commit`, which does not establish a commit convention. The repository owner manages commits, pushes, and pull requests. Pull requests should explain the change, identify its phase or task, report checks, and call out configuration impacts. Never commit credentials; `.env` and local build/cache artifacts are ignored. Keep `.env.example` free of secrets. Treat workflows, browser profiles, and artifacts as sensitive, and never execute arbitrary job-supplied Python on shared workers.
+
+### Completing and synchronizing a change
+
+For each completed phase or documented feature, update the status and verification notes in this file as part of the same change. Before syncing, inspect `git status --short --branch` and `git diff`; stage only the intended files. Ignored docs and work-log files are not included by ordinary `git add`; use `git add -f <path>` only when that document is intended to be versioned, and review the staged diff so local records are not accidentally committed.
+
+Use this sequence from the repository root, replacing the example message and paths with the change being delivered:
+
+```powershell
+git status --short --branch
+git add <intended-paths>
+git diff --cached
+git commit -m "Describe the completed phase or feature"
+git fetch origin
+git rebase origin/main
+git status --short --branch
+git log --oneline --graph --decorate -10
+git push origin main
+```
+
+Fetch before rebasing so the rebase uses the current remote tip. If the rebase reports conflicts, resolve each reported file, inspect it, run the relevant checks, then use `git add <resolved-path>` and `git rebase --continue`; use `git rebase --abort` to return to the pre-rebase branch. Do not push until the rebase completes and the branch/status and recent log have been reviewed. Keep unrelated local changes out of the commit; if they must be stashed, inspect `git stash list` first and use a descriptive message so the correct stash can be identified and restored later.
