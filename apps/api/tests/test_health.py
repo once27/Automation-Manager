@@ -1,6 +1,5 @@
-from fastapi.testclient import TestClient
-
 from browserfleet_api.main import app
+from fastapi.testclient import TestClient
 
 
 def test_health_returns_ok() -> None:
