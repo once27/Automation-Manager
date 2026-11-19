@@ -4,8 +4,11 @@ version = "0.1.0"
 description = "BrowserFleet FastAPI control plane."
 requires-python = ">=3.12"
 dependencies = [
+    "alembic==1.17.2",
     "fastapi==0.136.1",
     "httpx2==2.16.2",
+    "psycopg[binary]==3.2.12",
+    "sqlalchemy==2.0.44",
     "uvicorn==0.46.0",
 ]
 

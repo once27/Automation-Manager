@@ -1,5 +1,6 @@
 # Documentation and task records are maintained locally.
 *.md
+/LOCAL_DEVELOPMENT.md
 /docs/
 /work-log/
 
@@ -24,4 +25,3 @@ node_modules/
 .next/
 .pnpm-store/
 coverage/
-
