@@ -14,7 +14,13 @@ from browserfleet_api.db.config import get_database_url
 from browserfleet_api.db.models import ApiKey, Tenant
 from browserfleet_api.db.session import create_engine, create_session_factory
 
-_BOOTSTRAP_SCOPES = ["workflow:read", "workflow:write"]
+_BOOTSTRAP_SCOPES = ("workflow:read", "workflow:write")
+_AVAILABLE_SCOPES = (
+    "workflow:read",
+    "workflow:write",
+    "job:read",
+    "job:write",
+)
 _SLUG_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 
 
@@ -53,13 +59,29 @@ def _parser() -> argparse.ArgumentParser:
     bootstrap.add_argument(
         "--key-name", default="local-bootstrap", type=_text_argument(120)
     )
+    bootstrap.add_argument(
+        "--scope",
+        dest="scopes",
+        action="append",
+        choices=_AVAILABLE_SCOPES,
+        default=None,
+        help=(
+            "scope to grant (repeat for multiple scopes; "
+            "defaults to workflow read/write)"
+        ),
+    )
     return parser
 
 
 def _provision_tenant_key(
-    *, tenant_name: str, tenant_slug: str, key_name: str
+    *,
+    tenant_name: str,
+    tenant_slug: str,
+    key_name: str,
+    scopes: list[str] | None = None,
 ) -> tuple[UUID, str]:
     """Create or reuse an active tenant and issue one secret API key."""
+    granted_scopes = _select_scopes(scopes)
     raw_key = f"bf_{secrets.token_urlsafe(32)}"
     secret_hash = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
     engine = create_engine(get_database_url())
@@ -82,7 +104,7 @@ def _provision_tenant_key(
                 name=key_name,
                 key_prefix=raw_key[:16],
                 secret_hash=secret_hash,
-                scopes=list(_BOOTSTRAP_SCOPES),
+                scopes=granted_scopes,
             )
             session.add(api_key)
             session.flush()
@@ -94,6 +116,16 @@ def _provision_tenant_key(
     return tenant_id, raw_key
 
 
+def _select_scopes(scopes: list[str] | None) -> list[str]:
+    if scopes is None:
+        return list(_BOOTSTRAP_SCOPES)
+    if len(scopes) != len(set(scopes)):
+        raise ValueError("scope values must not be repeated")
+    if any(scope not in _AVAILABLE_SCOPES for scope in scopes):
+        raise ValueError("one or more scope values are not supported")
+    return list(scopes)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.command == "bootstrap-tenant":
@@ -102,6 +134,7 @@ def main(argv: list[str] | None = None) -> int:
                 tenant_name=args.tenant_name,
                 tenant_slug=args.tenant_slug,
                 key_name=args.key_name,
+                scopes=args.scopes,
             )
         except ValueError as error:
             print(f"error: {error}", file=sys.stderr)

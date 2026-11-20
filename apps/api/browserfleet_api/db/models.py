@@ -155,17 +155,51 @@ Index("ix_workers_pool_status", Worker.tenant_id, Worker.pool_id, Worker.status)
 Index("ix_workers_lease_expires", Worker.lease_expires_at)
 
 
-class Workflow(UUIDPrimaryKey, CreatedAt, Base):
-    __tablename__ = "workflows"
+class WorkflowFamily(UUIDPrimaryKey, CreatedAt, Base):
+    """Stable tenant-scoped identity shared by immutable workflow versions."""
+
+    __tablename__ = "workflow_families"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "id", name="uq_workflows_tenant_id_id"),
         UniqueConstraint(
-            "tenant_id", "name", "version", name="uq_workflows_tenant_name_version"
+            "tenant_id", "id", name="uq_workflow_families_tenant_id_id"
+        ),
+        UniqueConstraint(
+            "tenant_id", "name", name="uq_workflow_families_tenant_name"
         ),
         ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="RESTRICT"),
     )
 
     tenant_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
+
+
+class Workflow(UUIDPrimaryKey, CreatedAt, Base):
+    __tablename__ = "workflows"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_workflows_tenant_id_id"),
+        UniqueConstraint(
+            "tenant_id",
+            "workflow_family_id",
+            "version",
+            name="uq_workflows_tenant_family_version",
+        ),
+        UniqueConstraint(
+            "tenant_id", "name", "version", name="uq_workflows_tenant_name_version"
+        ),
+        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(
+            ["tenant_id", "workflow_family_id"],
+            ["workflow_families.tenant_id", "workflow_families.id"],
+            ondelete="RESTRICT",
+            name="fk_workflows_tenant_family",
+        ),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    workflow_family_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     version: Mapped[str] = mapped_column(String(40), nullable=False)
     package_ref: Mapped[str] = mapped_column(Text, nullable=False)
@@ -223,6 +257,12 @@ class Job(UUIDPrimaryKey, CreatedUpdatedAt, Base):
     requirements: Mapped[dict[str, Any]] = mapped_column(
         JsonObject, nullable=False, default=dict, server_default=text("'{}'::jsonb")
     )
+    execution_config: Mapped[dict[str, Any]] = mapped_column(
+        JsonObject, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
+    artifact_policy: Mapped[dict[str, Any]] = mapped_column(
+        JsonObject, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
     input_payload: Mapped[dict[str, Any]] = mapped_column(
         JsonObject, nullable=False, default=dict, server_default=text("'{}'::jsonb")
     )
@@ -271,7 +311,7 @@ Index(
     Job.tenant_id,
     Job.created_at,
     postgresql_where=Job.status.not_in(
-        ("SUCCEEDED", "FAILED", "CANCELED", "TIMED_OUT")
+        ("SUCCEEDED", "FAILED", "CANCELED", "CANCELLED", "TIMED_OUT")
     ),
 )
 
