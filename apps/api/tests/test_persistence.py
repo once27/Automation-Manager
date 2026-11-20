@@ -23,6 +23,7 @@ from browserfleet_api.db.models import (
     Worker,
     WorkerPool,
     Workflow,
+    WorkflowFamily,
 )
 from sqlalchemy import Engine, create_engine, inspect
 from sqlalchemy.exc import IntegrityError
@@ -97,8 +98,13 @@ def test_job_idempotency_and_tenant_foreign_keys(migrated_engine: Engine) -> Non
     with Session(migrated_engine) as session:
         session.add_all([tenant_a, tenant_b])
         session.flush()
+        family_a = WorkflowFamily(tenant_id=tenant_a.id, name="checkout")
+        family_b = WorkflowFamily(tenant_id=tenant_b.id, name="checkout")
+        session.add_all([family_a, family_b])
+        session.flush()
         workflow_a = Workflow(
             tenant_id=tenant_a.id,
+            workflow_family_id=family_a.id,
             name="checkout",
             version="1",
             package_ref="registry.example/checkout:1",
@@ -107,6 +113,7 @@ def test_job_idempotency_and_tenant_foreign_keys(migrated_engine: Engine) -> Non
         )
         workflow_b = Workflow(
             tenant_id=tenant_b.id,
+            workflow_family_id=family_b.id,
             name="checkout",
             version="1",
             package_ref="registry.example/checkout:1",
@@ -165,15 +172,19 @@ def test_only_one_active_session_lease_per_session(migrated_engine: Engine) -> N
         session.flush()
 
         pool = WorkerPool(tenant_id=tenant.id, name="default", max_concurrency=2)
+        family = WorkflowFamily(tenant_id=tenant.id, name="workflow")
+        session.add_all([pool, family])
+        session.flush()
         workflow = Workflow(
             tenant_id=tenant.id,
+            workflow_family_id=family.id,
             name="workflow",
             version="1",
             package_ref="registry.example/workflow:1",
             entrypoint="run",
             checksum="sha256:abc",
         )
-        session.add_all([pool, workflow])
+        session.add(workflow)
         session.flush()
         worker = Worker(
             tenant_id=tenant.id,

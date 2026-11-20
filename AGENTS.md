@@ -6,6 +6,8 @@ Use the matching specialist from `C:\Users\soham\.codex\agents\` for each task. 
 
 When completing a phase or a documented feature, update this file in the same change with its completion state, the relevant verification results, and any follow-up work. Keep the state precise: planned, implemented, tested, and released are different milestones. Because `work-log/` and other Markdown documentation are intentionally ignored, treat work-log notes as local records; put any status or handoff needed by other contributors in this tracked file (or explicitly force-add the relevant document when the owner intends to version it).
 
+Whenever a change adds or changes anything needed to install, configure, migrate, run, test, or operate BrowserFleet locally, including dependencies, environment variables, infrastructure, CLI commands, service startup, API authentication, or developer workflow, update LOCAL_DEVELOPMENT.md in the same change. Keep it as the owner copy-and-run guide: document exact commands in order, required terminal and environment context, expected endpoints or results, and cleanup or data-preservation notes where relevant. Verify each command against the current manifests and implementation; mark commands that could not be run as unverified. If the change does not affect local setup or workflow, no update is needed. LOCAL_DEVELOPMENT.md, docs, and work-log are Git-ignored by owner preference, so keep the local run guide current in this checkout and do not force-add it unless the owner explicitly asks to version it. Keep tracked instruction files such as AGENTS.md updated normally.
+
 ## Root-Cause-First Troubleshooting
 
 Every specialist must establish the root cause before changing code or configuration. Reproduce the reported failure when possible, then trace it through the relevant source of truth: runtime/interpreter selection, workspace membership and commands, dependency declarations and lockfiles, import paths, configuration, or the failing application path. Separate observed symptoms from hypotheses and record the evidence that confirms the cause.
@@ -18,7 +20,7 @@ Recent example: `backend-engineer` was invoked for the API dependency issue and 
 
 ## Project Structure
 
-- `apps/api/` contains the FastAPI application and pytest smoke test.
+- `apps/api/` contains the FastAPI application and pytest unit/integration tests.
 - `apps/dashboard/` contains the Next.js/TypeScript skeleton and Node route smoke test.
 - `workers/agent/` is the worker package boundary; Playwright is pinned there, but worker behavior is not implemented.
 - `docs/architecture/` contains the architecture and phase plans; `work-log/` contains task records.
@@ -27,9 +29,9 @@ Markdown documentation, `docs/`, and `work-log/` are intentionally Git-ignored a
 
 ## Development Commands
 
-Use Python 3.12 with uv and Node 22 with pnpm 10.29.3. Run `uv sync` and `pnpm install` from the root to install dependencies. Start the API with `uv run --project apps/api uvicorn browserfleet_api.main:app --app-dir apps/api --reload --host 127.0.0.1 --port 8000`; start the dashboard with `pnpm --filter @browserfleet/dashboard dev`.
+Use Python 3.12 with uv and Node 22 with pnpm 10.29.3. Follow `LOCAL_DEVELOPMENT.md` for the full Windows setup, PostgreSQL migration, tenant/API-key bootstrap, test database configuration, and API/dashboard run flow. Start the API with `uv run --project apps/api uvicorn browserfleet_api.main:app --app-dir apps/api --reload --host 127.0.0.1 --port 8000`; start the dashboard with `pnpm --filter @browserfleet/dashboard dev`.
 
-Run `pnpm run lint`, `pnpm run typecheck`, `pnpm run test`, and `pnpm run build` from the root. `pnpm run browsers:install` installs the worker's pinned Chromium browser. PostgreSQL, RabbitMQ, Redis, MinIO, and related local services belong to the later infrastructure phase and are not required by the current skeleton.
+Run `pnpm run lint`, `pnpm run typecheck`, `pnpm run test`, and `pnpm run build` from the root. `pnpm run browsers:install` installs the worker's pinned Chromium browser. PostgreSQL is required for authenticated workflow and job routes. RabbitMQ, Redis, and MinIO are available in local Compose, but Phase 2 does not publish jobs to a queue or use those services for job execution.
 
 ## Coding Style & Testing
 
