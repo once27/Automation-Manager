@@ -18,6 +18,13 @@ If evidence does not confirm a root cause, stop before making a fix. Report what
 
 Recent example: `backend-engineer` was invoked for the API dependency issue and again for the API test import issue; `devops-engineer` was also invoked for workspace dependency diagnosis. This repeated troubleshooting did not identify all causes on the first pass. All agents must follow the root-cause and regression-check requirements above, regardless of specialty.
 
+## Focus and Reporting
+
+- Inspect only files relevant to the current task; avoid broad repository scans unless the task requires them.
+- Understand and follow existing patterns before making changes.
+- Do not redesign existing architecture without explicit approval.
+- Report the files modified and the checks or tests run, including their results.
+
 ## Project Structure
 
 - `apps/api/` contains the FastAPI application and pytest unit/integration tests.
@@ -36,6 +43,14 @@ Run `pnpm run lint`, `pnpm run typecheck`, `pnpm run test`, and `pnpm run build`
 ## Coding Style & Testing
 
 Python targets 3.12, uses Ruff with import sorting, and is checked by strict Pyright. Python tests live under each package's `tests/` directory and use `test_*.py`; the API health check uses pytest. The dashboard uses TypeScript, ESLint, and Node's built-in test runner. Add tests for new behavior and failure paths; no coverage threshold is configured.
+
+## Phase Status & Milestones
+
+- **Phase 0 (Foundation & Monorepo Tooling):** Tested and released.
+- **Phase 1 (Database Schema & Persistence):** Tested and released.
+- **Phase 2 (Tenant Authentication, Workflow Registry & Job Lifecycle API):** Tested and released.
+- **Phase 3 (Worker Identity, Registration & WebSocket Protocol):** Implemented and verified locally against Docker PostgreSQL (37 pytest tests passing, including tenant isolation, lease expiry, heartbeat protocol, credential revocation, and operator actions). Exit gate verified; pending push/release by owner.
+- **Phase 4 (End-to-End Execution Slice):** Planned. Next milestone to implement Linux Docker adapter, execution manager, and Playwright smoke tests.
 
 ## Commits, Pull Requests & Security
 

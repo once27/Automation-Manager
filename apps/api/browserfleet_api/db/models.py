@@ -119,6 +119,11 @@ class Worker(UUIDPrimaryKey, CreatedUpdatedAt, Base):
         ),
         CheckConstraint("max_concurrency > 0", name="ck_workers_max_concurrency"),
         CheckConstraint("active_jobs >= 0", name="ck_workers_active_jobs"),
+        CheckConstraint(
+            "status IN ('REGISTERING', 'ONLINE', 'BUSY', 'DRAINING', "
+            "'OFFLINE', 'DISABLED', 'ERROR')",
+            name="ck_workers_status",
+        ),
     )
 
     tenant_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
@@ -128,7 +133,7 @@ class Worker(UUIDPrimaryKey, CreatedUpdatedAt, Base):
     platform: Mapped[str] = mapped_column(String(30), nullable=False)
     environment: Mapped[str] = mapped_column(String(40), nullable=False)
     status: Mapped[str] = mapped_column(
-        String(30), nullable=False, server_default="offline"
+        String(30), nullable=False, server_default="OFFLINE"
     )
     capabilities: Mapped[dict[str, Any]] = mapped_column(
         JsonObject, nullable=False, default=dict, server_default=text("'{}'::jsonb")
@@ -145,6 +150,7 @@ class Worker(UUIDPrimaryKey, CreatedUpdatedAt, Base):
     )
     worker_version: Mapped[str | None] = mapped_column(String(30))
     protocol_version: Mapped[str | None] = mapped_column(String(20))
+    connection_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
     last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -153,6 +159,48 @@ class Worker(UUIDPrimaryKey, CreatedUpdatedAt, Base):
 Index("ix_workers_tenant_status", Worker.tenant_id, Worker.status)
 Index("ix_workers_pool_status", Worker.tenant_id, Worker.pool_id, Worker.status)
 Index("ix_workers_lease_expires", Worker.lease_expires_at)
+
+
+class WorkerCredential(UUIDPrimaryKey, CreatedAt, Base):
+    """A revocable machine credential bound to exactly one tenant worker.
+
+    The raw credential is generated and displayed only by provisioning code.
+    Runtime authentication compares a hash and must derive tenancy from this
+    record rather than accepting a worker-supplied tenant identity.
+    """
+
+    __tablename__ = "worker_credentials"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_worker_credentials_tenant_id_id"),
+        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(
+            ["tenant_id", "worker_id"],
+            ["workers.tenant_id", "workers.id"],
+            ondelete="RESTRICT",
+            name="fk_worker_credentials_tenant_worker",
+        ),
+        CheckConstraint(
+            "length(key_prefix) BETWEEN 1 AND 16",
+            name="ck_worker_credentials_prefix_length",
+        ),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    worker_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    key_prefix: Mapped[str] = mapped_column(String(16), nullable=False)
+    secret_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+Index("ix_worker_credentials_prefix", WorkerCredential.key_prefix)
+Index(
+    "uq_worker_credentials_active_worker",
+    WorkerCredential.worker_id,
+    unique=True,
+    postgresql_where=WorkerCredential.revoked_at.is_(None),
+)
 
 
 class WorkflowFamily(UUIDPrimaryKey, CreatedAt, Base):

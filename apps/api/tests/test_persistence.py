@@ -21,6 +21,7 @@ from browserfleet_api.db.models import (
     Tenant,
     User,
     Worker,
+    WorkerCredential,
     WorkerPool,
     Workflow,
     WorkflowFamily,
@@ -74,6 +75,7 @@ def test_initial_migration_creates_phase1_tables(migrated_engine: Engine) -> Non
         "api_keys",
         "worker_pools",
         "workers",
+        "worker_credentials",
         "workflows",
         "jobs",
         "job_attempts",
@@ -88,6 +90,9 @@ def test_initial_migration_creates_phase1_tables(migrated_engine: Engine) -> Non
     assert "artifact_bytes" not in table_names
     assert "contents" not in {
         column["name"] for column in inspect(migrated_engine).get_columns("artifacts")
+    }
+    assert "connection_id" in {
+        column["name"] for column in inspect(migrated_engine).get_columns("workers")
     }
 
 
@@ -245,9 +250,78 @@ def test_only_one_active_session_lease_per_session(migrated_engine: Engine) -> N
         session.flush()
 
 
+def test_worker_credentials_are_tenant_bound_and_revocable(
+    migrated_engine: Engine,
+) -> None:
+    tenant_a = Tenant(name="Tenant A", slug="credential-tenant-a")
+    tenant_b = Tenant(name="Tenant B", slug="credential-tenant-b")
+    with Session(migrated_engine) as session:
+        session.add_all([tenant_a, tenant_b])
+        session.flush()
+        worker = Worker(
+            tenant_id=tenant_a.id,
+            name="worker-credential-test",
+            platform="linux",
+            environment="docker",
+            max_concurrency=1,
+        )
+        session.add(worker)
+        session.flush()
+
+        assert worker.status == "OFFLINE"
+        credential = WorkerCredential(
+            tenant_id=tenant_a.id,
+            worker_id=worker.id,
+            key_prefix="bfw_credential",
+            secret_hash="credential-hash-a",
+        )
+        session.add(credential)
+        session.flush()
+
+        with pytest.raises(IntegrityError), session.begin_nested():
+            session.add(
+                WorkerCredential(
+                    tenant_id=tenant_a.id,
+                    worker_id=worker.id,
+                    key_prefix="bfw_second_key",
+                    secret_hash="credential-hash-b",
+                )
+            )
+            session.flush()
+
+        with pytest.raises(IntegrityError), session.begin_nested():
+            session.add(
+                WorkerCredential(
+                    tenant_id=tenant_b.id,
+                    worker_id=worker.id,
+                    key_prefix="bfw_wrong_tenant",
+                    secret_hash="credential-hash-c",
+                )
+            )
+            session.flush()
+
+        credential.revoked_at = datetime(2027, 1, 1, tzinfo=UTC)
+        session.flush()
+        session.add(
+            WorkerCredential(
+                tenant_id=tenant_a.id,
+                worker_id=worker.id,
+                key_prefix="bfw_replacement",
+                secret_hash="credential-hash-d",
+            )
+        )
+        session.flush()
+
+        with pytest.raises(IntegrityError), session.begin_nested():
+            worker.status = "offline"
+            session.flush()
+
+
 def test_credential_and_artifact_models_exclude_raw_secret_bytes() -> None:
     assert "secret_hash" in ApiKey.__table__.columns
     assert "secret" not in ApiKey.__table__.columns
+    assert "secret_hash" in WorkerCredential.__table__.columns
+    assert "secret" not in WorkerCredential.__table__.columns
     assert "object_key" in Artifact.__table__.columns
     assert not {"contents", "bytes", "data"} & set(Artifact.__table__.columns.keys())
     assert {
@@ -255,6 +329,7 @@ def test_credential_and_artifact_models_exclude_raw_secret_bytes() -> None:
         User,
         WorkerPool,
         Worker,
+        WorkerCredential,
         Workflow,
         Job,
         JobAttempt,

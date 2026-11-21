@@ -11,7 +11,7 @@ from uuid import UUID
 from sqlalchemy import select
 
 from browserfleet_api.db.config import get_database_url
-from browserfleet_api.db.models import ApiKey, Tenant
+from browserfleet_api.db.models import ApiKey, Tenant, Worker, WorkerCredential
 from browserfleet_api.db.session import create_engine, create_session_factory
 
 _BOOTSTRAP_SCOPES = ("workflow:read", "workflow:write")
@@ -20,7 +20,11 @@ _AVAILABLE_SCOPES = (
     "workflow:write",
     "job:read",
     "job:write",
+    "worker:read",
+    "worker:write",
 )
+_WORKER_PLATFORMS = ("linux", "windows")
+_WORKER_ENVIRONMENTS = ("docker", "linux_headed", "windows_native")
 _SLUG_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 
 
@@ -30,9 +34,7 @@ def _text_argument(max_length: int) -> Callable[[str], str]:
         if not normalized:
             raise argparse.ArgumentTypeError("must not be empty")
         if len(normalized) > max_length:
-            raise argparse.ArgumentTypeError(
-                f"must be at most {max_length} characters"
-            )
+            raise argparse.ArgumentTypeError(f"must be at most {max_length} characters")
         return normalized
 
     return parse
@@ -69,6 +71,24 @@ def _parser() -> argparse.ArgumentParser:
             "scope to grant (repeat for multiple scopes; "
             "defaults to workflow read/write)"
         ),
+    )
+    provision_worker = commands.add_parser(
+        "provision-worker",
+        help="create a worker identity and issue a one-time worker credential",
+    )
+    provision_worker.add_argument("--tenant-slug", required=True, type=_tenant_slug)
+    provision_worker.add_argument(
+        "--worker-name", required=True, type=_text_argument(120)
+    )
+    provision_worker.add_argument(
+        "--platform", required=True, choices=_WORKER_PLATFORMS
+    )
+    provision_worker.add_argument(
+        "--environment", required=True, choices=_WORKER_ENVIRONMENTS
+    )
+    provision_worker.add_argument("--hostname", type=_text_argument(255))
+    provision_worker.add_argument(
+        "--max-concurrency", required=True, type=_positive_int
     )
     return parser
 
@@ -126,6 +146,73 @@ def _select_scopes(scopes: list[str] | None) -> list[str]:
     return list(scopes)
 
 
+def _positive_int(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be an integer") from error
+    if number <= 0:
+        raise argparse.ArgumentTypeError("must be greater than zero")
+    return number
+
+
+def _provision_worker(
+    *,
+    tenant_slug: str,
+    worker_name: str,
+    platform: str,
+    environment: str,
+    hostname: str | None,
+    max_concurrency: int,
+) -> tuple[UUID, UUID, str]:
+    """Create an offline worker and return its one-time machine credential."""
+    if (platform == "linux") != (environment in {"docker", "linux_headed"}):
+        raise ValueError("platform and environment must be compatible")
+
+    raw_credential = f"bfw_{secrets.token_urlsafe(32)}"
+    secret_hash = hashlib.sha256(raw_credential.encode("utf-8")).hexdigest()
+    engine = create_engine(get_database_url())
+    session_factory = create_session_factory(engine)
+    try:
+        with session_factory.begin() as session:
+            tenant = session.scalar(select(Tenant).where(Tenant.slug == tenant_slug))
+            if tenant is None:
+                raise ValueError(
+                    f"Tenant '{tenant_slug}' does not exist; bootstrap it before provisioning a worker"
+                )
+            if tenant.status != "active":
+                raise ValueError(
+                    f"Tenant '{tenant_slug}' exists but is not active; refusing to provision a worker"
+                )
+
+            worker = Worker(
+                tenant_id=tenant.id,
+                name=worker_name,
+                hostname=hostname,
+                platform=platform,
+                environment=environment,
+                status="OFFLINE",
+                max_concurrency=max_concurrency,
+            )
+            session.add(worker)
+            session.flush()
+            session.add(
+                WorkerCredential(
+                    tenant_id=tenant.id,
+                    worker_id=worker.id,
+                    key_prefix=raw_credential[:16],
+                    secret_hash=secret_hash,
+                )
+            )
+            tenant_id = tenant.id
+            worker_id = worker.id
+    finally:
+        engine.dispose()
+
+    # Return the machine secret only after its transaction commits.
+    return tenant_id, worker_id, raw_credential
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.command == "bootstrap-tenant":
@@ -143,6 +230,26 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Tenant ID: {tenant_id}")
         print("API key (shown once; store it securely):")
         print(raw_key)
+        return 0
+
+    if args.command == "provision-worker":
+        try:
+            tenant_id, worker_id, raw_credential = _provision_worker(
+                tenant_slug=args.tenant_slug,
+                worker_name=args.worker_name,
+                platform=args.platform,
+                environment=args.environment,
+                hostname=args.hostname,
+                max_concurrency=args.max_concurrency,
+            )
+        except ValueError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
+
+        print(f"Tenant ID: {tenant_id}")
+        print(f"Worker ID: {worker_id}")
+        print("Worker credential (shown once; store it securely):")
+        print(raw_credential)
         return 0
 
     return 2

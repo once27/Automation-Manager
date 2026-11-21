@@ -3,7 +3,9 @@ name = "browserfleet-workspace"
 version = "0.1.0"
 description = "BrowserFleet Python workspace and shared development tooling."
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "websockets>=15.0.1",
+]
 
 [dependency-groups]
 dev = [
@@ -27,7 +29,7 @@ extend-select = ["I"]
 [tool.pytest.ini_options]
 testpaths = ["apps/api/tests", "workers/agent/tests"]
 python_files = ["test_*.py"]
-pythonpath = ["apps/api"]
+pythonpath = ["apps/api", "workers/agent"]
 
 [tool.pyright]
 pythonVersion = "3.12"
