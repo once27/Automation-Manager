@@ -44,6 +44,14 @@ Run `pnpm run lint`, `pnpm run typecheck`, `pnpm run test`, and `pnpm run build`
 
 Python targets 3.12, uses Ruff with import sorting, and is checked by strict Pyright. Python tests live under each package's `tests/` directory and use `test_*.py`; the API health check uses pytest. The dashboard uses TypeScript, ESLint, and Node's built-in test runner. Add tests for new behavior and failure paths; no coverage threshold is configured.
 
+## Phase Status & Milestones
+
+- **Phase 0 (Foundation & Monorepo Tooling):** Tested and released.
+- **Phase 1 (Database Schema & Persistence):** Tested and released.
+- **Phase 2 (Tenant Authentication, Workflow Registry & Job Lifecycle API):** Tested and released.
+- **Phase 3 (Worker Identity, Registration & WebSocket Protocol):** Implemented and verified locally against Docker PostgreSQL (37 pytest tests passing, including tenant isolation, lease expiry, heartbeat protocol, credential revocation, and operator actions). Exit gate verified; pending push/release by owner.
+- **Phase 4 (End-to-End Execution Slice):** Planned. Next milestone to implement Linux Docker adapter, execution manager, and Playwright smoke tests.
+
 ## Commits, Pull Requests & Security
 
 The available Git history currently contains only `test-commit`, which does not establish a commit convention. The repository owner manages commits, pushes, and pull requests. Pull requests should explain the change, identify its phase or task, report checks, and call out configuration impacts. Never commit credentials; `.env` and local build/cache artifacts are ignored. Keep `.env.example` free of secrets. Treat workflows, browser profiles, and artifacts as sensitive, and never execute arbitrary job-supplied Python on shared workers.

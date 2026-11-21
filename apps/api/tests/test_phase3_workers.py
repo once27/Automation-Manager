@@ -34,6 +34,7 @@ API_ROOT = Path(__file__).parents[1]
 ALEMBIC_INI = API_ROOT / "alembic.ini"
 WORKER_CREDENTIAL = "bfw_test_worker_credential_0001"
 OPERATOR_KEY = "bf_test_worker_operator_0001"
+OTHER_OPERATOR_KEY = "bf_test_other_operator_0002"
 
 
 @pytest.fixture
@@ -237,3 +238,94 @@ def test_worker_operator_routes_are_tenant_scoped_and_expiry_is_server_owned(
         worker = session.scalar(select(Worker).where(Worker.id == worker_id))
         assert worker is not None
         assert worker.status == "OFFLINE"
+
+
+def test_cross_tenant_worker_isolation(
+    api_client: TestClient, worker_identity: tuple[UUID, UUID], migrated_engine: Engine
+) -> None:
+    _tenant_id, worker_id = worker_identity
+    other_worker_id = uuid4()
+    with Session(migrated_engine) as session:
+        other_tenant = Tenant(name="Other Tenant B", slug=f"other-b-{uuid4().hex}")
+        session.add(other_tenant)
+        session.flush()
+        other_worker = Worker(
+            id=other_worker_id,
+            tenant_id=other_tenant.id,
+            name="linux-other-02",
+            platform="linux",
+            environment="docker",
+            max_concurrency=1,
+        )
+        session.add(other_worker)
+        session.add(
+            ApiKey(
+                tenant_id=other_tenant.id,
+                name="other-operator",
+                key_prefix=OTHER_OPERATOR_KEY[:16],
+                secret_hash=hashlib.sha256(
+                    OTHER_OPERATOR_KEY.encode("utf-8")
+                ).hexdigest(),
+                scopes=["worker:read", "worker:write"],
+            )
+        )
+        session.commit()
+
+    # 1. Connecting with Tenant A's credential but registering with Tenant B's worker ID is rejected.
+    with pytest.raises(WebSocketDisconnect), api_client.websocket_connect(
+        "/api/v1/workers/connect",
+        headers={"Authorization": f"Worker {WORKER_CREDENTIAL}"},
+    ) as websocket:
+        websocket.send_text(_registration(other_worker_id))
+        websocket.receive_json()
+
+    # 2. Connecting with Tenant A's credential, registering properly, but heartbeating with Tenant B's worker ID is rejected.
+    with pytest.raises(WebSocketDisconnect), api_client.websocket_connect(
+        "/api/v1/workers/connect",
+        headers={"Authorization": f"Worker {WORKER_CREDENTIAL}"},
+    ) as websocket:
+        websocket.send_text(_registration(worker_id))
+        registered = websocket.receive_json()
+        assert registered["message_type"] == "worker.registered"
+        websocket.send_text(
+            _envelope(
+                other_worker_id,
+                "worker.heartbeat",
+                {"status": "ONLINE", "free_concurrency": 1},
+            )
+        )
+        websocket.receive_json()
+
+    # 3. Tenant B operator cannot access or mutate Tenant A worker.
+    assert (
+        api_client.get(
+            f"/api/v1/workers/{worker_id}",
+            headers={"Authorization": f"Bearer {OTHER_OPERATOR_KEY}"},
+        ).status_code
+        == 404
+    )
+
+    assert (
+        api_client.post(
+            f"/api/v1/workers/{worker_id}/drain",
+            headers={"Authorization": f"Bearer {OTHER_OPERATOR_KEY}"},
+        ).status_code
+        == 404
+    )
+
+    assert (
+        api_client.post(
+            f"/api/v1/workers/{worker_id}/disable",
+            headers={"Authorization": f"Bearer {OTHER_OPERATOR_KEY}"},
+        ).status_code
+        == 404
+    )
+
+    assert (
+        api_client.post(
+            f"/api/v1/workers/{worker_id}/enable",
+            headers={"Authorization": f"Bearer {OTHER_OPERATOR_KEY}"},
+        ).status_code
+        == 404
+    )
+
