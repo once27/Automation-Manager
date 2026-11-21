@@ -18,6 +18,13 @@ If evidence does not confirm a root cause, stop before making a fix. Report what
 
 Recent example: `backend-engineer` was invoked for the API dependency issue and again for the API test import issue; `devops-engineer` was also invoked for workspace dependency diagnosis. This repeated troubleshooting did not identify all causes on the first pass. All agents must follow the root-cause and regression-check requirements above, regardless of specialty.
 
+## Focus and Reporting
+
+- Inspect only files relevant to the current task; avoid broad repository scans unless the task requires them.
+- Understand and follow existing patterns before making changes.
+- Do not redesign existing architecture without explicit approval.
+- Report the files modified and the checks or tests run, including their results.
+
 ## Project Structure
 
 - `apps/api/` contains the FastAPI application and pytest unit/integration tests.
